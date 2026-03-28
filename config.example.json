@@ -1,0 +1,22 @@
+{
+	"name": "Oculis Station",
+	"game_path": "/path/to/SS13/OculisStation",
+	"dme_name": "tgstation.dme",
+	"map_files_path": "_maps/map_files",
+	"optimize_level": 3,
+	"generate_webp": true,
+	"render_passes": {
+		"include": [
+			"icon-smoothing-2025"
+		],
+		"exclude": [
+			"icon-smoothing"
+		]
+	},
+	"maps": [
+		{
+			"map_name": "SerenityStation",
+			"dmm_path": "SerenityStation/SerenityStation.dmm"
+		}
+	]
+}

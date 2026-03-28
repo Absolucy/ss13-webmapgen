@@ -1,0 +1,43 @@
+[package]
+name = "webmapgen"
+version = "0.1.0"
+edition = "2024"
+authors = ["Lucy <lucy@absolucy.moe>"]
+license = "MPL-2.0"
+repository = "https://github.com/Absolucy/ss13-webmapgen"
+
+[lints.clippy]
+# presets
+complexity = "warn"
+correctness = "warn"
+perf = "warn"
+style = "warn"
+suspicious = "warn"
+# individual lints
+assigning_clones = "warn"
+create_dir = "warn"
+default_trait_access = "warn"
+inefficient_to_string = "warn"
+redundant_type_annotations = "warn"
+self_named_module_files = "warn"
+str_to_string = "warn"
+string_to_string = "warn"
+
+[dependencies]
+bumpalo = "3"
+bytemuck = { version = "1", features = ["extern_crate_alloc"] }
+color-eyre = "0.6"
+dmm-tools = { git = "https://github.com/Absolucy/SpacemanDMM", features = ["png"], branch = "no-corners" }
+dreammaker = { git = "https://github.com/Absolucy/SpacemanDMM", branch = "no-corners" }
+foldhash = "0.2"
+mimalloc = "0.1"
+oxipng = { version = "10", features = ["parallel", "zopfli"], default-features = false }
+# rayon = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+webp = { version = "0.3", default-features = false }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+debug = "limited"
