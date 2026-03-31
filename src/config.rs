@@ -47,6 +47,10 @@ impl ServerConfig {
 			..oxipng::Options::from_preset(self.optimize_level)
 		}
 	}
+
+	pub fn base_map_path(&self) -> PathBuf {
+		self.game_path.join(&self.map_files_path)
+	}
 }
 
 #[derive(Debug, Clone, Deserialize)]

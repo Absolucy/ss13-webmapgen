@@ -15,7 +15,13 @@ use dmm_tools::{
 	minimap,
 	render_passes::RenderPass,
 };
-use std::{cell::RefCell, sync::RwLock};
+use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use std::{
+	cell::RefCell,
+	path::Path,
+	sync::{Mutex, RwLock},
+	time::Instant,
+};
 
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
@@ -38,87 +44,126 @@ fn main() -> Result<()> {
 		})?;
 	}
 
+	let mut context = dm::Context::default();
 	let mut dm_context = DmContext::default();
 	dm_context
-		.objtree(&config)
+		.objtree(&mut context, &config)
 		.wrap_err("failed to setup obj tree")?;
 
 	let render_passes = dmm_tools::render_passes::configure_list(
-		&dm_context.dm_context.config().map_renderer,
+		&context.config().map_renderer,
 		&config.render_passes.include,
 		&config.render_passes.exclude,
 	);
 
-	let base_map_path = config.game_path.join(&config.map_files_path);
-	let mut minimaps = Vec::<GeneratedMinimap>::new();
-	for map_config in &config.maps {
-		let map_path = base_map_path.join(&map_config.dmm_path);
-		let map = dmm::Map::from_file(&map_path).wrap_err_with(|| {
-			format!(
-				"failed to load {} from {}",
-				&map_config.map_name,
-				map_path.display()
-			)
-		})?;
-		let (dim_x, dim_y, dim_z) = map.dim_xyz();
-		println!(
-			"{}: dim_x={dim_x}, dim_y={dim_y}, dim_z={dim_z}",
-			&map_config.map_name
-		);
-		for z in 0..dim_z {
-			generate_for_z(
-				&map,
-				z,
-				&config,
-				map_config,
-				&dm_context,
-				&render_passes,
-				&mut minimaps,
-			)
-			.wrap_err_with(|| {
-				format!(
-					"failed to generate minimap for {} (z={z})",
-					&map_config.map_name
-				)
-			})?;
+	let minimaps = Mutex::new(Vec::<GeneratedMinimap>::new());
+	config.maps.par_iter().for_each(|map_config| {
+		if let Err(err) =
+			generate_minimap(&config, map_config, &dm_context, &render_passes, &minimaps)
+		{
+			thread_safe_print_err(format!(
+				"failed to generate minimap for {}: {err}",
+				&map_config.map_name
+			));
 		}
-	}
+	});
+
+	let minimaps = std::mem::take(&mut *minimaps.lock().unwrap());
 
 	println!("optimizing {} minimaps", minimaps.len());
 	let optimize_options = config.optimize_options();
-	for GeneratedMinimap { name, z, image } in minimaps {
-		if config.generate_webp {
-			// funny thing, i find that lossless produces much smaller falls than lossy,
-			// even at the same quality setting
-			let raw: &[u8] = bytemuck::cast_slice(image.data.as_slice().unwrap());
-			let webp = webp::Encoder::from_rgba(raw, image.width, image.height)
-				.encode_lossless()
-				.to_vec();
-			std::fs::write(config.out_folder.join(format!("{name}-{z}.webp")), webp)
-				.wrap_err("failed to write webp")?;
-			println!("{name}-{z} webp done");
+	minimaps.into_par_iter().for_each(|minimap| {
+		if let Err(err) = generate_minimap_image(minimap, &config, &optimize_options) {
+			thread_safe_print_err(format!("failed to write minimap: {err}"));
 		}
+	});
+	thread_safe_print("done :)");
 
-		let png = oxipng::RawImage::new(
-			image.width,
-			image.height,
-			oxipng::ColorType::RGBA,
-			oxipng::BitDepth::Eight,
-			bytemuck::cast_vec(image.data.into_raw_vec()),
+	Ok(())
+}
+
+fn generate_minimap(
+	server_config: &ServerConfig,
+	map_config: &MapConfig,
+	dm_context: &DmContext,
+	render_passes: &[Box<dyn RenderPass>],
+	minimaps: &Mutex<Vec<GeneratedMinimap>>,
+) -> Result<()> {
+	let map_path = server_config.base_map_path().join(&map_config.dmm_path);
+	let map = dmm::Map::from_file(&map_path).wrap_err_with(|| {
+		format!(
+			"failed to load {} from {}",
+			&map_config.map_name,
+			map_path.display()
 		)
-		.wrap_err("failed to create raw png image")?;
-		let optimized_png = png
-			.create_optimized_png(&optimize_options)
-			.wrap_err("failed to optimize png image")?;
-		std::fs::write(
-			config.out_folder.join(format!("{name}-{z}.png")),
-			optimized_png,
-		)
-		.wrap_err("failed to write optimized png")?;
-		println!("{name}-{z} png done");
+	})?;
+	let (dim_x, dim_y, dim_z) = map.dim_xyz();
+	println!(
+		"{}: dim_x={dim_x}, dim_y={dim_y}, dim_z={dim_z}",
+		&map_config.map_name
+	);
+	(0..dim_z).into_par_iter().for_each(|z| {
+		if let Err(err) = generate_for_z(
+			&map,
+			z,
+			server_config,
+			map_config,
+			dm_context,
+			render_passes,
+			minimaps,
+		) {
+			thread_safe_print_err(format!(
+				"failed to generate minimap for {} (z={z}): {err}",
+				&map_config.map_name
+			));
+		}
+	});
+	Ok(())
+}
+
+fn generate_minimap_image(
+	minimap: GeneratedMinimap,
+	config: &ServerConfig,
+	optimize_options: &oxipng::Options,
+) -> Result<()> {
+	let GeneratedMinimap { name, z, image } = minimap;
+	let mut start = Instant::now();
+	if config.generate_webp {
+		// funny thing, i find that lossless produces much smaller falls than lossy,
+		// even at the same quality setting
+		let raw: &[u8] = bytemuck::cast_slice(image.data.as_slice().unwrap());
+		let webp = webp::Encoder::from_rgba(raw, image.width, image.height)
+			.encode_lossless()
+			.to_vec();
+		std::fs::write(config.out_folder.join(format!("{name}-{z}.webp")), webp)
+			.wrap_err("failed to write webp")?;
+		thread_safe_print(format!(
+			"{name}-{z} webp done in {:.2} seconds",
+			start.elapsed().as_secs_f64()
+		));
+		start = Instant::now();
 	}
-	println!("done :)");
 
+	let png = oxipng::RawImage::new(
+		image.width,
+		image.height,
+		oxipng::ColorType::RGBA,
+		oxipng::BitDepth::Eight,
+		bytemuck::cast_vec(image.data.into_raw_vec()),
+	)
+	.wrap_err("failed to create raw png image")?;
+	let optimized_png = png
+		.create_optimized_png(optimize_options)
+		.wrap_err("failed to optimize png image")?;
+	std::fs::write(
+		config.out_folder.join(format!("{name}-{z}.png")),
+		optimized_png,
+	)
+	.wrap_err("failed to write optimized png")?;
+	thread_safe_print(format!(
+		"{name}-{z} png done in {:.2} seconds",
+		start.elapsed().as_secs_f64()
+	));
 	Ok(())
 }
 
@@ -129,7 +174,7 @@ fn generate_for_z(
 	map_config: &MapConfig,
 	dm_context: &DmContext,
 	render_passes: &[Box<dyn RenderPass>],
-	minimaps: &mut Vec<GeneratedMinimap>,
+	minimaps: &Mutex<Vec<GeneratedMinimap>>,
 ) -> Result<()> {
 	let errors = RwLock::default();
 	BUMP.with_borrow(|bump| {
@@ -145,10 +190,10 @@ fn generate_for_z(
 			bump,
 		};
 		let map_name = &map_config.map_name;
-		println!("generating minimap for {map_name} (z={z})");
+		thread_safe_print(format!("generating minimap for {map_name} (z={z})"));
 		let image = minimap::generate(minimap_context, &dm_context.icon_cache)
 			.map_err(|_| eyre!("failed to generate minimap"))?;
-		minimaps.push(GeneratedMinimap {
+		minimaps.lock().unwrap().push(GeneratedMinimap {
 			name: map_name.clone(),
 			z,
 			image,
@@ -165,4 +210,18 @@ struct GeneratedMinimap {
 	name: String,
 	z: usize,
 	image: dmm_tools::dmi::Image,
+}
+
+fn thread_safe_print(meow: impl AsRef<str>) {
+	use std::io::Write;
+
+	let mut stdout = std::io::stdout().lock();
+	let _ = writeln!(stdout, "{}", meow.as_ref());
+}
+
+fn thread_safe_print_err(meow: impl AsRef<str>) {
+	use std::io::Write;
+
+	let mut stderr = std::io::stderr().lock();
+	let _ = writeln!(stderr, "{}", meow.as_ref());
 }
