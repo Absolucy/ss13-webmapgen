@@ -10,6 +10,7 @@ use crate::{
 };
 use bumpalo::Bump;
 use color_eyre::eyre::{Context, Result, eyre};
+use dm::config::MapRenderer;
 use dmm_tools::{
 	dmm::{self, Map},
 	minimap,
@@ -18,13 +19,28 @@ use dmm_tools::{
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::{
 	cell::RefCell,
-	path::Path,
 	sync::{Mutex, RwLock},
 	time::Instant,
 };
 
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
+struct RenderPassHolder {
+	main: Vec<Box<dyn RenderPass>>,
+	pipes: Vec<Box<dyn RenderPass>>,
+}
+
+fn create_render_passes(config: &ServerConfig, map_renderer: &MapRenderer) -> RenderPassHolder {
+	let main = dmm_tools::render_passes::configure_list(
+		map_renderer,
+		&config.render_passes.include,
+		&config.render_passes.exclude,
+	);
+	let pipes =
+		dmm_tools::render_passes::configure_list(map_renderer, &["only-wires-and-pipes"], &[]);
+	RenderPassHolder { main, pipes }
+}
 
 fn main() -> Result<()> {
 	color_eyre::install()?;
@@ -35,11 +51,11 @@ fn main() -> Result<()> {
 			.wrap_err("failed to parse config.json")?
 	};
 
-	if !config.out_folder.exists() {
-		std::fs::create_dir_all(&config.out_folder).wrap_err_with(|| {
+	if !config.out_path.exists() {
+		std::fs::create_dir_all(&config.out_path).wrap_err_with(|| {
 			format!(
 				"failed to create output folder at {}",
-				config.out_folder.display()
+				config.out_path.display()
 			)
 		})?;
 	}
@@ -50,11 +66,7 @@ fn main() -> Result<()> {
 		.objtree(&mut context, &config)
 		.wrap_err("failed to setup obj tree")?;
 
-	let render_passes = dmm_tools::render_passes::configure_list(
-		&context.config().map_renderer,
-		&config.render_passes.include,
-		&config.render_passes.exclude,
-	);
+	let render_passes = create_render_passes(&config, &context.config().map_renderer);
 
 	let minimaps = Mutex::new(Vec::<GeneratedMinimap>::new());
 	config.maps.par_iter().for_each(|map_config| {
@@ -86,7 +98,7 @@ fn generate_minimap(
 	server_config: &ServerConfig,
 	map_config: &MapConfig,
 	dm_context: &DmContext,
-	render_passes: &[Box<dyn RenderPass>],
+	render_passes: &RenderPassHolder,
 	minimaps: &Mutex<Vec<GeneratedMinimap>>,
 ) -> Result<()> {
 	let map_path = server_config.base_map_path().join(&map_config.dmm_path);
@@ -135,7 +147,7 @@ fn generate_minimap_image(
 		let webp = webp::Encoder::from_rgba(raw, image.width, image.height)
 			.encode_lossless()
 			.to_vec();
-		std::fs::write(config.out_folder.join(format!("{name}-{z}.webp")), webp)
+		std::fs::write(config.out_path.join(format!("{name}-{z}.webp")), webp)
 			.wrap_err("failed to write webp")?;
 		thread_safe_print(format!(
 			"{name}-{z} webp done in {:.2} seconds",
@@ -156,7 +168,7 @@ fn generate_minimap_image(
 		.create_optimized_png(optimize_options)
 		.wrap_err("failed to optimize png image")?;
 	std::fs::write(
-		config.out_folder.join(format!("{name}-{z}.png")),
+		config.out_path.join(format!("{name}-{z}.png")),
 		optimized_png,
 	)
 	.wrap_err("failed to write optimized png")?;
@@ -173,7 +185,7 @@ fn generate_for_z(
 	_server_config: &ServerConfig,
 	map_config: &MapConfig,
 	dm_context: &DmContext,
-	render_passes: &[Box<dyn RenderPass>],
+	render_passes: &RenderPassHolder,
 	minimaps: &Mutex<Vec<GeneratedMinimap>>,
 ) -> Result<()> {
 	let errors = RwLock::default();
@@ -185,7 +197,7 @@ fn generate_for_z(
 			level: map.z_level(z),
 			min: (0, 0),
 			max: (dim_x - 1, dim_y - 1),
-			render_passes,
+			render_passes: &render_passes.main,
 			errors: &errors,
 			bump,
 		};

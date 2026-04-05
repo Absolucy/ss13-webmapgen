@@ -29,7 +29,7 @@ pub struct ServerConfig {
 	pub dme_name: String,
 	pub map_files_path: PathBuf,
 	#[serde(default = "default_out_folder")]
-	pub out_folder: PathBuf,
+	pub out_path: PathBuf,
 	#[serde(default = "default_opt_preset")]
 	pub optimize_level: u8,
 	#[serde(default = "default_true")]
