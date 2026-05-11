@@ -13,10 +13,27 @@
 			"icon-smoothing"
 		]
 	},
-	"maps": [
+	"categories": [
 		{
-			"map_name": "SerenityStation",
-			"dmm_path": "SerenityStation/SerenityStation.dmm"
+			"name": "Stations",
+			"maps": [
+				{
+					"map_name": "SerenityStation",
+					"dmm_path": "SerenityStation/SerenityStation.dmm"
+				}
+			],
+			"subcategories": [
+				{
+					"name": "Dungeons",
+					"maps": [
+						{
+							"map_name": "ExampleDungeon",
+							"dmm_path": "Dungeons/ExampleDungeon.dmm",
+							"supports_pipes": false
+						}
+					]
+				}
+			]
 		}
 	]
 }

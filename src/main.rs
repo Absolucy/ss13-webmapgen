@@ -47,11 +47,38 @@ fn main() -> Result<()> {
 
 	let render_passes = create_render_passes(&config, &context.config().map_renderer);
 
+	let all_maps: Vec<_> = config
+		.categories
+		.iter()
+		.flat_map(|cat| {
+			let direct = cat.maps.iter().map(|m| {
+				let map_dir = config.out_path.join(&cat.name).join(&m.map_name);
+				(m, map_dir)
+			});
+			let from_subs = cat.subcategories.iter().flat_map(|sub| {
+				sub.maps.iter().map(|m| {
+					let map_dir = config
+						.out_path
+						.join(&cat.name)
+						.join(&sub.name)
+						.join(&m.map_name);
+					(m, map_dir)
+				})
+			});
+			direct.chain(from_subs)
+		})
+		.collect();
+
 	let minimaps = Mutex::new(Vec::<GeneratedMinimap>::new());
-	config.maps.par_iter().for_each(|map_config| {
-		if let Err(err) =
-			generate_minimap(&config, map_config, &dm_context, &render_passes, &minimaps)
-		{
+	all_maps.par_iter().for_each(|(map_config, map_dir)| {
+		if let Err(err) = generate_minimap(
+			&config,
+			map_config,
+			&dm_context,
+			&render_passes,
+			&minimaps,
+			map_dir.clone(),
+		) {
 			thread_safe_print_err(format!(
 				"failed to generate minimap for {}: {err}",
 				&map_config.map_name

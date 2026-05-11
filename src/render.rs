@@ -14,6 +14,7 @@ use dmm_tools::{
 };
 use std::{
 	cell::RefCell,
+	path::{Path, PathBuf},
 	sync::{Mutex, RwLock},
 };
 
@@ -34,6 +35,7 @@ pub fn create_render_passes(config: &ServerConfig, map_renderer: &MapRenderer) -
 }
 
 pub struct GeneratedMinimap {
+	pub map_dir: PathBuf,
 	pub name: String,
 	pub z: usize,
 	pub image: dmm_tools::dmi::Image,
@@ -49,6 +51,7 @@ pub fn generate_minimap(
 	dm_context: &DmContext,
 	render_passes: &RenderPassHolder,
 	minimaps: &Mutex<Vec<GeneratedMinimap>>,
+	map_dir: PathBuf,
 ) -> Result<()> {
 	use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
@@ -66,7 +69,15 @@ pub fn generate_minimap(
 		&map_config.map_name
 	));
 	(0..dim_z).into_par_iter().for_each(|z| {
-		if let Err(err) = generate_for_z(&map, z, map_config, dm_context, render_passes, minimaps) {
+		if let Err(err) = generate_for_z(
+			&map,
+			z,
+			map_config,
+			dm_context,
+			render_passes,
+			minimaps,
+			&map_dir,
+		) {
 			thread_safe_print_err(format!(
 				"failed to generate minimap for {} (z={z}): {err}",
 				&map_config.map_name
@@ -83,6 +94,7 @@ fn generate_for_z(
 	dm_context: &DmContext,
 	render_passes: &RenderPassHolder,
 	minimaps: &Mutex<Vec<GeneratedMinimap>>,
+	map_dir: &Path,
 ) -> Result<()> {
 	let errors = RwLock::default();
 	BUMP.with_borrow(|bump| {
@@ -102,6 +114,7 @@ fn generate_for_z(
 		let image = minimap::generate(minimap_context, &dm_context.icon_cache)
 			.map_err(|_| eyre!("failed to generate minimap"))?;
 		minimaps.lock().unwrap().push(GeneratedMinimap {
+			map_dir: map_dir.to_owned(),
 			name: map_name.to_owned(),
 			z,
 			image,

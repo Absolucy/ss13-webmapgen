@@ -36,7 +36,7 @@ pub struct ServerConfig {
 	pub generate_webp: bool,
 	#[serde(default)]
 	pub render_passes: RenderPassesConfig,
-	pub maps: Vec<MapConfig>,
+	pub categories: Vec<MapCategory>,
 }
 
 impl ServerConfig {
@@ -53,11 +53,65 @@ impl ServerConfig {
 	}
 }
 
+#[derive(Debug, Clone)]
+pub struct ResolvedFlags {
+	pub supports_pipes: bool,
+	pub render_once: bool,
+	pub do_ftl: bool,
+}
+
+impl ResolvedFlags {
+	pub fn resolve(map: &MapConfig, sub: Option<&MapSubCategory>, cat: &MapCategory) -> Self {
+		Self {
+			supports_pipes: map
+				.supports_pipes
+				.or_else(|| sub.and_then(|s| s.supports_pipes))
+				.or(cat.supports_pipes)
+				.unwrap_or(true),
+			render_once: map
+				.render_once
+				.or_else(|| sub.and_then(|s| s.render_once))
+				.or(cat.render_once)
+				.unwrap_or(false),
+			do_ftl: map
+				.do_ftl
+				.or_else(|| sub.and_then(|s| s.do_ftl))
+				.or(cat.do_ftl)
+				.unwrap_or(true),
+		}
+	}
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct MapCategory {
+	pub name: String,
+	#[serde(default)]
+	pub maps: Vec<MapConfig>,
+	#[serde(default)]
+	pub subcategories: Vec<MapSubCategory>,
+	pub supports_pipes: Option<bool>,
+	pub render_once: Option<bool>,
+	pub do_ftl: Option<bool>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct MapSubCategory {
+	pub name: String,
+	#[serde(default)]
+	pub maps: Vec<MapConfig>,
+	pub supports_pipes: Option<bool>,
+	pub render_once: Option<bool>,
+	pub do_ftl: Option<bool>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct MapConfig {
 	pub map_name: String,
 	pub dmm_path: PathBuf,
 	pub friendly_name: Option<String>,
+	pub supports_pipes: Option<bool>,
+	pub render_once: Option<bool>,
+	pub do_ftl: Option<bool>,
 }
 
 impl MapConfig {
