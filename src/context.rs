@@ -3,14 +3,10 @@ use crate::config::ServerConfig;
 use color_eyre::eyre::{Context, Result};
 use dm::objtree::ObjectTree;
 use dmm_tools::IconCache;
-use std::sync::atomic::AtomicIsize;
-
 #[derive(Default)]
 pub struct DmContext {
 	pub objtree: ObjectTree,
 	pub icon_cache: IconCache,
-	pub exit_status: AtomicIsize,
-	pub parallel: bool,
 }
 
 impl DmContext {

@@ -21,7 +21,6 @@ inefficient_to_string = "warn"
 redundant_type_annotations = "warn"
 self_named_module_files = "warn"
 str_to_string = "warn"
-string_to_string = "warn"
 
 [dependencies]
 bumpalo = "3"
@@ -29,7 +28,6 @@ bytemuck = { version = "1", features = ["extern_crate_alloc"] }
 color-eyre = "0.6"
 dmm-tools = { git = "https://github.com/Absolucy/SpacemanDMM", features = ["png"], branch = "no-corners" }
 dreammaker = { git = "https://github.com/Absolucy/SpacemanDMM", branch = "no-corners" }
-foldhash = "0.2"
 mimalloc = "0.1"
 oxipng = { version = "10", features = ["parallel", "zopfli"], default-features = false }
 rayon = "1"
