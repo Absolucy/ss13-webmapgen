@@ -2,7 +2,6 @@
 use crate::{
 	config::{MapConfig, ResolvedFlags, ServerConfig},
 	context::DmContext,
-	util::{thread_safe_print, thread_safe_print_err},
 };
 use bumpalo::Bump;
 use color_eyre::eyre::{Context, Result, eyre};
@@ -12,10 +11,12 @@ use dmm_tools::{
 	minimap,
 	render_passes::RenderPass,
 };
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::{
 	cell::RefCell,
 	path::{Path, PathBuf},
 	sync::{Mutex, RwLock},
+	time::Duration,
 };
 
 pub struct RenderPassHolder {
@@ -52,6 +53,20 @@ thread_local! {
 	static BUMP: RefCell<Bump> = RefCell::new(Bump::new());
 }
 
+pub struct ProgressState {
+	pub mp: MultiProgress,
+	pub total: ProgressBar,
+}
+
+fn map_bar_style() -> ProgressStyle {
+	ProgressStyle::with_template(
+		"  {spinner:.cyan} {prefix:.bold.cyan}: {bar:30.cyan/white.dim} {pos}/{len} z-levels",
+	)
+	.expect("invalid progress style template")
+	.progress_chars("=>-")
+	.tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏", ""])
+}
+
 pub fn generate_minimap(
 	server_config: &ServerConfig,
 	map_config: &MapConfig,
@@ -59,7 +74,12 @@ pub fn generate_minimap(
 	render_passes: &RenderPassHolder,
 	minimaps: &Mutex<Vec<GeneratedMinimap>>,
 	output: MapOutputSpec,
+	progress: &ProgressState,
 ) -> Result<()> {
+	let ProgressState {
+		mp: multi_progress,
+		total: total_bar,
+	} = progress;
 	let MapOutputSpec {
 		map_dir,
 		pipes_dir,
@@ -76,7 +96,7 @@ pub fn generate_minimap(
 		)
 	})?;
 	let (dim_x, dim_y, dim_z) = map.dim_xyz();
-	thread_safe_print(format!(
+	total_bar.println(format!(
 		"{}: dim_x={dim_x}, dim_y={dim_y}, dim_z={dim_z}",
 		&map_config.map_name
 	));
@@ -88,13 +108,22 @@ pub fn generate_minimap(
 				.exists()
 		});
 		if all_exist {
-			thread_safe_print(format!(
+			total_bar.println(format!(
 				"{}: skipping (renderOnce, outputs exist)",
 				&map_config.map_name
 			));
 			return Ok(());
 		}
 	}
+
+	let passes_count = if pipes_dir.is_some() { 2u64 } else { 1u64 };
+	total_bar.inc_length(dim_z as u64 * passes_count);
+
+	let map_bar =
+		multi_progress.insert_before(total_bar, ProgressBar::new(dim_z as u64 * passes_count));
+	map_bar.set_style(map_bar_style());
+	map_bar.set_prefix(map_config.name().to_owned());
+	map_bar.enable_steady_tick(Duration::from_millis(100));
 
 	std::fs::create_dir_all(&map_dir)
 		.wrap_err_with(|| format!("failed to create map directory {}", map_dir.display()))?;
@@ -112,11 +141,14 @@ pub fn generate_minimap(
 			minimaps,
 			&map_dir,
 		) {
-			thread_safe_print_err(format!(
-				"failed to generate minimap for {} (z={z}): {err}",
-				&map_config.map_name
+			total_bar.println(format!(
+				"failed to generate minimap for {} (z={}): {err}",
+				&map_config.map_name,
+				z + 1
 			));
 		}
+		map_bar.inc(1);
+		total_bar.inc(1);
 	});
 
 	if let Some(ref pipes_dir) = pipes_dir {
@@ -130,14 +162,18 @@ pub fn generate_minimap(
 				minimaps,
 				pipes_dir,
 			) {
-				thread_safe_print_err(format!(
-					"failed to generate pipes minimap for {} (z={z}): {err}",
-					&map_config.map_name
+				total_bar.println(format!(
+					"failed to generate pipes minimap for {} (z={}): {err}",
+					&map_config.map_name,
+					z + 1
 				));
 			}
+			map_bar.inc(1);
+			total_bar.inc(1);
 		});
 	}
 
+	map_bar.finish_and_clear();
 	Ok(())
 }
 
@@ -164,7 +200,6 @@ fn generate_for_z(
 			bump,
 		};
 		let map_name = &map_config.map_name;
-		thread_safe_print(format!("generating minimap for {map_name} (z={})", z + 1));
 		let image = minimap::generate(minimap_context, &dm_context.icon_cache)
 			.map_err(|_| eyre!("failed to generate minimap"))?;
 		minimaps.lock().unwrap().push(GeneratedMinimap {

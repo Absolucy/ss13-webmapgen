@@ -24,6 +24,7 @@ str_to_string = "warn"
 
 [dependencies]
 bumpalo = "3"
+indicatif = "0.17"
 bytemuck = { version = "1", features = ["extern_crate_alloc"] }
 color-eyre = "0.6"
 dmm-tools = { git = "https://github.com/Absolucy/SpacemanDMM", features = ["png"], branch = "no-corners" }

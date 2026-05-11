@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MPL-2.0
-use crate::{config::ServerConfig, render::GeneratedMinimap, util::thread_safe_print};
+use crate::{config::ServerConfig, render::GeneratedMinimap};
 use color_eyre::eyre::{Context, Result, eyre};
-use std::time::Instant;
+use indicatif::ProgressBar;
 
 pub fn generate_minimap_image(
 	minimap: GeneratedMinimap,
 	config: &ServerConfig,
 	optimize_options: &oxipng::Options,
+	encode_bar: &ProgressBar,
 ) -> Result<()> {
 	let GeneratedMinimap {
 		map_dir,
@@ -16,7 +17,6 @@ pub fn generate_minimap_image(
 	} = minimap;
 	std::fs::create_dir_all(&map_dir)
 		.wrap_err_with(|| format!("failed to create output directory {}", map_dir.display()))?;
-	let mut start = Instant::now();
 	if config.generate_webp {
 		// lossless produces smaller files than lossy even at the same quality setting
 		let raw: &[u8] = bytemuck::cast_slice(
@@ -30,11 +30,6 @@ pub fn generate_minimap_image(
 			.to_vec();
 		std::fs::write(map_dir.join(format!("{name}-{z}.webp")), webp)
 			.wrap_err("failed to write webp")?;
-		thread_safe_print(format!(
-			"{name}-{z} webp done in {:.2} seconds",
-			start.elapsed().as_secs_f64()
-		));
-		start = Instant::now();
 	}
 
 	let png = oxipng::RawImage::new(
@@ -50,9 +45,6 @@ pub fn generate_minimap_image(
 		.wrap_err("failed to optimize png image")?;
 	std::fs::write(map_dir.join(format!("{name}-{z}.png")), optimized_png)
 		.wrap_err("failed to write optimized png")?;
-	thread_safe_print(format!(
-		"{name}-{z} png done in {:.2} seconds",
-		start.elapsed().as_secs_f64()
-	));
+	encode_bar.inc(1);
 	Ok(())
 }

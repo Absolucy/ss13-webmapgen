@@ -5,21 +5,31 @@ pub mod config;
 pub mod context;
 pub mod encode;
 pub mod render;
-pub mod util;
 
 use crate::{
 	config::{ResolvedFlags, ServerConfig},
 	context::DmContext,
 	encode::generate_minimap_image,
-	render::{GeneratedMinimap, MapOutputSpec, create_render_passes, generate_minimap},
-	util::{thread_safe_print, thread_safe_print_err},
+	render::{
+		GeneratedMinimap, MapOutputSpec, ProgressState, create_render_passes, generate_minimap,
+	},
 };
 use color_eyre::eyre::{Context, Result};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
-use std::{path::PathBuf, sync::Mutex};
+use std::{path::PathBuf, sync::Mutex, time::Duration};
 
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
+fn total_bar_style() -> ProgressStyle {
+	ProgressStyle::with_template(
+		"{spinner:.green} [{elapsed_precise}] {bar:40.green/white.dim} {pos}/{len} {msg}",
+	)
+	.expect("invalid progress style template")
+	.progress_chars("=>-")
+	.tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏", ""])
+}
 
 fn main() -> Result<()> {
 	color_eyre::install()?;
@@ -94,6 +104,15 @@ fn main() -> Result<()> {
 		})
 		.collect();
 
+	let progress = {
+		let mp = MultiProgress::new();
+		let total = mp.add(ProgressBar::new(0));
+		total.set_style(total_bar_style());
+		total.set_message("rendering");
+		total.enable_steady_tick(Duration::from_millis(100));
+		ProgressState { mp, total }
+	};
+
 	let minimaps = Mutex::new(Vec::<GeneratedMinimap>::new());
 	all_maps.par_iter().for_each(|(map_config, output)| {
 		if let Err(err) = generate_minimap(
@@ -103,8 +122,9 @@ fn main() -> Result<()> {
 			&render_passes,
 			&minimaps,
 			output.clone(),
+			&progress,
 		) {
-			thread_safe_print_err(format!(
+			progress.total.println(format!(
 				"failed to generate minimap for {}: {err}",
 				&map_config.map_name
 			));
@@ -113,14 +133,22 @@ fn main() -> Result<()> {
 
 	let minimaps = std::mem::take(&mut *minimaps.lock().unwrap());
 
-	thread_safe_print(format!("optimizing {} minimaps", minimaps.len()));
+	progress.total.set_message("encoding");
+	progress.total.inc_length(minimaps.len() as u64);
 	let optimize_options = config.optimize_options();
 	minimaps.into_par_iter().for_each(|minimap| {
-		if let Err(err) = generate_minimap_image(minimap, &config, &optimize_options) {
-			thread_safe_print_err(format!("failed to write minimap: {err}"));
+		if let Err(err) =
+			generate_minimap_image(minimap, &config, &optimize_options, &progress.total)
+		{
+			progress
+				.total
+				.println(format!("failed to write minimap: {err}"));
 		}
 	});
-	thread_safe_print("done :)");
+
+	progress.total.finish_and_clear();
+	progress.mp.clear().ok();
+	println!("done :)");
 
 	Ok(())
 }
