@@ -17,7 +17,7 @@ pub fn generate_minimap_image(
 	} = minimap;
 	std::fs::create_dir_all(&map_dir)
 		.wrap_err_with(|| format!("failed to create output directory {}", map_dir.display()))?;
-	if config.generate_webp {
+	if config.generate_webp || config.webp_only {
 		// lossless produces smaller files than lossy even at the same quality setting
 		let raw: &[u8] = bytemuck::cast_slice(
 			image
@@ -32,19 +32,21 @@ pub fn generate_minimap_image(
 			.wrap_err("failed to write webp")?;
 	}
 
-	let png = oxipng::RawImage::new(
-		image.width,
-		image.height,
-		oxipng::ColorType::RGBA,
-		oxipng::BitDepth::Eight,
-		bytemuck::cast_vec(image.data.into_raw_vec()),
-	)
-	.wrap_err("failed to create raw png image")?;
-	let optimized_png = png
-		.create_optimized_png(optimize_options)
-		.wrap_err("failed to optimize png image")?;
-	std::fs::write(map_dir.join(format!("{name}-{z}.png")), optimized_png)
-		.wrap_err("failed to write optimized png")?;
+	if !config.webp_only {
+		let png = oxipng::RawImage::new(
+			image.width,
+			image.height,
+			oxipng::ColorType::RGBA,
+			oxipng::BitDepth::Eight,
+			bytemuck::cast_vec(image.data.into_raw_vec()),
+		)
+		.wrap_err("failed to create raw png image")?;
+		let optimized_png = png
+			.create_optimized_png(optimize_options)
+			.wrap_err("failed to optimize png image")?;
+		std::fs::write(map_dir.join(format!("{name}-{z}.png")), optimized_png)
+			.wrap_err("failed to write optimized png")?;
+	}
 	encode_bar.inc(1);
 	Ok(())
 }

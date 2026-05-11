@@ -38,6 +38,8 @@ pub struct ServerConfig {
 	#[serde(default = "default_true")]
 	pub generate_webp: bool,
 	#[serde(default)]
+	pub webp_only: bool,
+	#[serde(default)]
 	pub render_passes: RenderPassesConfig,
 	pub categories: Vec<MapCategory>,
 }
