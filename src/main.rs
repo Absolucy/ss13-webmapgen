@@ -8,15 +8,15 @@ pub mod render;
 pub mod util;
 
 use crate::{
-	config::ServerConfig,
+	config::{ResolvedFlags, ServerConfig},
 	context::DmContext,
 	encode::generate_minimap_image,
-	render::{GeneratedMinimap, create_render_passes, generate_minimap},
+	render::{GeneratedMinimap, MapOutputSpec, create_render_passes, generate_minimap},
 	util::{thread_safe_print, thread_safe_print_err},
 };
 use color_eyre::eyre::{Context, Result};
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
-use std::sync::Mutex;
+use std::{path::PathBuf, sync::Mutex};
 
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
@@ -52,17 +52,42 @@ fn main() -> Result<()> {
 		.iter()
 		.flat_map(|cat| {
 			let direct = cat.maps.iter().map(|m| {
+				let flags = ResolvedFlags::resolve(m, None, cat);
 				let map_dir = config.out_path.join(&cat.name).join(&m.map_name);
-				(m, map_dir)
+				let pipes_dir: Option<PathBuf> = flags.supports_pipes.then(|| {
+					config
+						.out_path
+						.join(&cat.name)
+						.join("pipes")
+						.join(&m.map_name)
+				});
+				(m, MapOutputSpec {
+					map_dir,
+					pipes_dir,
+					flags,
+				})
 			});
 			let from_subs = cat.subcategories.iter().flat_map(|sub| {
 				sub.maps.iter().map(|m| {
+					let flags = ResolvedFlags::resolve(m, Some(sub), cat);
 					let map_dir = config
 						.out_path
 						.join(&cat.name)
 						.join(&sub.name)
 						.join(&m.map_name);
-					(m, map_dir)
+					let pipes_dir: Option<PathBuf> = flags.supports_pipes.then(|| {
+						config
+							.out_path
+							.join(&cat.name)
+							.join(&sub.name)
+							.join("pipes")
+							.join(&m.map_name)
+					});
+					(m, MapOutputSpec {
+						map_dir,
+						pipes_dir,
+						flags,
+					})
 				})
 			});
 			direct.chain(from_subs)
@@ -70,14 +95,14 @@ fn main() -> Result<()> {
 		.collect();
 
 	let minimaps = Mutex::new(Vec::<GeneratedMinimap>::new());
-	all_maps.par_iter().for_each(|(map_config, map_dir)| {
+	all_maps.par_iter().for_each(|(map_config, output)| {
 		if let Err(err) = generate_minimap(
 			&config,
 			map_config,
 			&dm_context,
 			&render_passes,
 			&minimaps,
-			map_dir.clone(),
+			output.clone(),
 		) {
 			thread_safe_print_err(format!(
 				"failed to generate minimap for {}: {err}",
