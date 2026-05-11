@@ -1,11 +1,10 @@
 {
-	"name": "Oculis Station",
-	"game_path": "/path/to/SS13/OculisStation",
-	"dme_name": "tgstation.dme",
-	"map_files_path": "_maps/map_files",
-	"optimize_level": 3,
-	"generate_webp": true,
-	"render_passes": {
+	"$schema": "config.schema.json",
+	"baseUrl": "https://maps.example.com",
+	"outPath": "out/",
+	"generateWebp": true,
+	"optimizeLevel": 3,
+	"renderPasses": {
 		"include": [
 			"icon-smoothing-2025"
 		],
@@ -16,10 +15,12 @@
 	"categories": [
 		{
 			"name": "Stations",
+			"gamePath": "/path/to/SS13/MyStation",
+			"mapFilesPath": "_maps/map_files",
 			"maps": [
 				{
-					"map_name": "SerenityStation",
-					"dmm_path": "SerenityStation/SerenityStation.dmm"
+					"name": "SerenityStation",
+					"dmmPath": "SerenityStation/SerenityStation.dmm"
 				}
 			],
 			"subcategories": [
@@ -27,11 +28,27 @@
 					"name": "Dungeons",
 					"maps": [
 						{
-							"map_name": "ExampleDungeon",
-							"dmm_path": "Dungeons/ExampleDungeon.dmm",
-							"supports_pipes": false
+							"name": "ExampleDungeon",
+							"dmmPath": "Dungeons/ExampleDungeon.dmm",
+							"supportsPipes": false
 						}
 					]
+				}
+			]
+		},
+		{
+			"name": "OtherGame",
+			"friendlyName": "Other Game",
+			"gamePath": "/path/to/SS13/OtherGame",
+			"envFile": "othergame.dme",
+			"mapFilesPath": "_maps",
+			"supportsPipes": false,
+			"doFTL": false,
+			"maps": [
+				{
+					"name": "MainStation",
+					"dmmPath": "MainStation/MainStation.dmm",
+					"friendlyName": "Main Station"
 				}
 			]
 		}

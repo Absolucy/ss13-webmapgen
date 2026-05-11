@@ -14,7 +14,12 @@ fn default_out_folder() -> PathBuf {
 	"out".into()
 }
 
+fn default_dme_name() -> String {
+	"tgstation.dme".to_owned()
+}
+
 #[derive(Default, Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RenderPassesConfig {
 	#[serde(default)]
 	pub include: Vec<String>,
@@ -23,11 +28,9 @@ pub struct RenderPassesConfig {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ServerConfig {
-	pub name: String,
-	pub game_path: PathBuf,
-	pub dme_name: String,
-	pub map_files_path: PathBuf,
+	pub base_url: Option<String>,
 	#[serde(default = "default_out_folder")]
 	pub out_path: PathBuf,
 	#[serde(default = "default_opt_preset")]
@@ -46,10 +49,6 @@ impl ServerConfig {
 			strip: oxipng::StripChunks::Safe,
 			..oxipng::Options::from_preset(self.optimize_level)
 		}
-	}
-
-	pub fn base_map_path(&self) -> PathBuf {
-		self.game_path.join(&self.map_files_path)
 	}
 }
 
@@ -83,8 +82,15 @@ impl ResolvedFlags {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MapCategory {
 	pub name: String,
+	pub friendly_name: Option<String>,
+	pub logo: Option<String>,
+	pub game_path: PathBuf,
+	pub map_files_path: PathBuf,
+	#[serde(default = "default_dme_name")]
+	pub env_file: String,
 	#[serde(default)]
 	pub maps: Vec<MapConfig>,
 	#[serde(default)]
@@ -94,9 +100,17 @@ pub struct MapCategory {
 	pub do_ftl: Option<bool>,
 }
 
+impl MapCategory {
+	pub fn base_map_path(&self) -> PathBuf {
+		self.game_path.join(&self.map_files_path)
+	}
+}
+
 #[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MapSubCategory {
 	pub name: String,
+	pub friendly_name: Option<String>,
 	#[serde(default)]
 	pub maps: Vec<MapConfig>,
 	pub supports_pipes: Option<bool>,
@@ -105,8 +119,9 @@ pub struct MapSubCategory {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MapConfig {
-	pub map_name: String,
+	pub name: String,
 	pub dmm_path: PathBuf,
 	pub friendly_name: Option<String>,
 	pub supports_pipes: Option<bool>,
@@ -115,7 +130,7 @@ pub struct MapConfig {
 }
 
 impl MapConfig {
-	pub fn name(&self) -> &str {
-		self.friendly_name.as_ref().unwrap_or(&self.map_name)
+	pub fn display_name(&self) -> &str {
+		self.friendly_name.as_ref().unwrap_or(&self.name)
 	}
 }

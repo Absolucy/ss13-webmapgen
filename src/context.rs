@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MPL-2.0
-use crate::config::ServerConfig;
 use color_eyre::eyre::{Context, Result};
 use dm::objtree::ObjectTree;
 use dmm_tools::IconCache;
+use std::path::Path;
+
 #[derive(Default)]
 pub struct DmContext {
 	pub objtree: ObjectTree,
@@ -10,8 +11,13 @@ pub struct DmContext {
 }
 
 impl DmContext {
-	pub fn objtree(&mut self, context: &mut dm::Context, config: &ServerConfig) -> Result<()> {
-		let environment = config.game_path.join(&config.dme_name);
+	pub fn objtree(
+		&mut self,
+		context: &mut dm::Context,
+		game_path: &Path,
+		env_file: &str,
+	) -> Result<()> {
+		let environment = game_path.join(env_file);
 		println!("parsing {}", environment.display());
 
 		if let Some(parent) = environment.parent() {

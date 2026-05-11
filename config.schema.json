@@ -1,0 +1,172 @@
+{
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"type": "object",
+	"required": [
+		"categories"
+	],
+	"properties": {
+		"$schema": {
+			"type": "string"
+		},
+		"baseUrl": {
+			"description": "The domain name this will be hosted on, without a trailing slash",
+			"type": "string"
+		},
+		"outPath": {
+			"description": "Output directory for generated images (default: out/)",
+			"type": "string"
+		},
+		"optimizeLevel": {
+			"description": "oxipng optimization preset 0-6 (default: 2)",
+			"type": "integer",
+			"minimum": 0,
+			"maximum": 6
+		},
+		"generateWebp": {
+			"description": "Also produce lossless WebP alongside PNG (default: true)",
+			"type": "boolean"
+		},
+		"renderPasses": {
+			"description": "Control dmm-tools render pass selection",
+			"type": "object",
+			"properties": {
+				"include": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				},
+				"exclude": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					}
+				}
+			}
+		},
+		"categories": {
+			"type": "array",
+			"items": {
+				"$ref": "#/definitions/MapCategory"
+			}
+		}
+	},
+	"definitions": {
+		"MapCategory": {
+			"type": "object",
+			"required": [
+				"name",
+				"gamePath",
+				"mapFilesPath"
+			],
+			"properties": {
+				"name": {
+					"description": "Directory name for this category in the output",
+					"type": "string"
+				},
+				"friendlyName": {
+					"description": "Display name for this category",
+					"type": "string"
+				},
+				"logo": {
+					"description": "Icon filename in the logos folder",
+					"type": "string"
+				},
+				"gamePath": {
+					"description": "Absolute path to the root of the SS13 codebase",
+					"type": "string"
+				},
+				"mapFilesPath": {
+					"description": "Path to map files relative to gamePath",
+					"type": "string"
+				},
+				"envFile": {
+					"description": "DME environment filename relative to gamePath (default: tgstation.dme)",
+					"type": "string"
+				},
+				"maps": {
+					"type": "array",
+					"items": {
+						"$ref": "#/definitions/MapInfo"
+					}
+				},
+				"subcategories": {
+					"type": "array",
+					"items": {
+						"$ref": "#/definitions/MapSubCategory"
+					}
+				},
+				"supportsPipes": {
+					"type": "boolean"
+				},
+				"renderOnce": {
+					"type": "boolean"
+				},
+				"doFTL": {
+					"type": "boolean"
+				}
+			}
+		},
+		"MapSubCategory": {
+			"type": "object",
+			"required": [
+				"name"
+			],
+			"properties": {
+				"name": {
+					"description": "Directory name for this subcategory in the output",
+					"type": "string"
+				},
+				"friendlyName": {
+					"description": "Display name for this subcategory",
+					"type": "string"
+				},
+				"maps": {
+					"type": "array",
+					"items": {
+						"$ref": "#/definitions/MapInfo"
+					}
+				},
+				"supportsPipes": {
+					"type": "boolean"
+				},
+				"renderOnce": {
+					"type": "boolean"
+				},
+				"doFTL": {
+					"type": "boolean"
+				}
+			}
+		},
+		"MapInfo": {
+			"type": "object",
+			"required": [
+				"name",
+				"dmmPath"
+			],
+			"properties": {
+				"name": {
+					"description": "Identifier for this map, used in output filenames and directory name",
+					"type": "string"
+				},
+				"dmmPath": {
+					"description": "Path to the .dmm file relative to the category's mapFilesPath",
+					"type": "string"
+				},
+				"friendlyName": {
+					"description": "Display name for this map",
+					"type": "string"
+				},
+				"supportsPipes": {
+					"type": "boolean"
+				},
+				"renderOnce": {
+					"type": "boolean"
+				},
+				"doFTL": {
+					"type": "boolean"
+				}
+			}
+		}
+	}
+}

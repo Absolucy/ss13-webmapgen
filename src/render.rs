@@ -44,6 +44,7 @@ pub struct GeneratedMinimap {
 
 #[derive(Clone)]
 pub struct MapOutputSpec {
+	pub base_map_path: PathBuf,
 	pub map_dir: PathBuf,
 	pub pipes_dir: Option<PathBuf>,
 	pub flags: ResolvedFlags,
@@ -68,7 +69,6 @@ fn map_bar_style() -> ProgressStyle {
 }
 
 pub fn generate_minimap(
-	server_config: &ServerConfig,
 	map_config: &MapConfig,
 	dm_context: &DmContext,
 	render_passes: &RenderPassHolder,
@@ -81,36 +81,37 @@ pub fn generate_minimap(
 		total: total_bar,
 	} = progress;
 	let MapOutputSpec {
+		base_map_path,
 		map_dir,
 		pipes_dir,
 		flags,
 	} = output;
 	use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
-	let map_path = server_config.base_map_path().join(&map_config.dmm_path);
+	let map_path = base_map_path.join(&map_config.dmm_path);
 	let map = dmm::Map::from_file(&map_path).wrap_err_with(|| {
 		format!(
 			"failed to load {} from {}",
-			&map_config.map_name,
+			&map_config.name,
 			map_path.display()
 		)
 	})?;
 	let (dim_x, dim_y, dim_z) = map.dim_xyz();
 	total_bar.println(format!(
 		"{}: dim_x={dim_x}, dim_y={dim_y}, dim_z={dim_z}",
-		&map_config.map_name
+		&map_config.name
 	));
 
 	if flags.render_once {
 		let all_exist = (1..=dim_z).all(|z| {
 			map_dir
-				.join(format!("{}-{z}.png", &map_config.map_name))
+				.join(format!("{}-{z}.png", &map_config.name))
 				.exists()
 		});
 		if all_exist {
 			total_bar.println(format!(
 				"{}: skipping (renderOnce, outputs exist)",
-				&map_config.map_name
+				&map_config.name
 			));
 			return Ok(());
 		}
@@ -122,7 +123,7 @@ pub fn generate_minimap(
 	let map_bar =
 		multi_progress.insert_before(total_bar, ProgressBar::new(dim_z as u64 * passes_count));
 	map_bar.set_style(map_bar_style());
-	map_bar.set_prefix(map_config.name().to_owned());
+	map_bar.set_prefix(map_config.display_name().to_owned());
 	map_bar.enable_steady_tick(Duration::from_millis(100));
 
 	std::fs::create_dir_all(&map_dir)
@@ -143,7 +144,7 @@ pub fn generate_minimap(
 		) {
 			total_bar.println(format!(
 				"failed to generate minimap for {} (z={}): {err}",
-				&map_config.map_name,
+				&map_config.name,
 				z + 1
 			));
 		}
@@ -164,7 +165,7 @@ pub fn generate_minimap(
 			) {
 				total_bar.println(format!(
 					"failed to generate pipes minimap for {} (z={}): {err}",
-					&map_config.map_name,
+					&map_config.name,
 					z + 1
 				));
 			}
@@ -199,7 +200,7 @@ fn generate_for_z(
 			errors: &errors,
 			bump,
 		};
-		let map_name = &map_config.map_name;
+		let map_name = &map_config.name;
 		let image = minimap::generate(minimap_context, &dm_context.icon_cache)
 			.map_err(|_| eyre!("failed to generate minimap"))?;
 		minimaps.lock().unwrap().push(GeneratedMinimap {

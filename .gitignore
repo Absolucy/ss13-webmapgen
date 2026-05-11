@@ -3,6 +3,7 @@ Cargo.lock
 
 config*.json
 !config.example.json
+!config.schema.json
 mapinfo.json
 *.png
 *.webp
