@@ -18,7 +18,7 @@ impl DmContext {
 		env_file: &str,
 	) -> Result<()> {
 		let environment = game_path.join(env_file);
-		println!("parsing {}", environment.display());
+		// println!("parsing {}", environment.display());
 
 		if let Some(parent) = environment.parent() {
 			self.icon_cache.set_icons_root(parent);
