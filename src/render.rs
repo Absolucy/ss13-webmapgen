@@ -199,6 +199,7 @@ fn generate_for_z(
 			render_passes,
 			errors: &errors,
 			bump,
+			print_errors: false,
 		};
 		let map_name = &map_config.name;
 		let image = minimap::generate(minimap_context, &dm_context.icon_cache)
