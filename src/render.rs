@@ -190,27 +190,30 @@ fn generate_for_z(
 	let errors = RwLock::default();
 	BUMP.with_borrow_mut(|bump| {
 		let (dim_x, dim_y, _dim_z) = map.dim_xyz();
-		let minimap_context = minimap::Context {
-			objtree: &dm_context.objtree,
-			map,
-			level: map.z_level(z),
-			min: (0, 0),
-			max: (dim_x - 1, dim_y - 1),
-			render_passes,
-			errors: &errors,
-			bump,
-			print_errors: false,
-		};
 		let map_name = &map_config.name;
-		let image = minimap::generate(minimap_context, &dm_context.icon_cache)
-			.map_err(|_| eyre!("failed to generate minimap"))?;
+		let image = {
+			let minimap_context = minimap::Context {
+				objtree: &dm_context.objtree,
+				map,
+				level: map.z_level(z),
+				min: (0, 0),
+				max: (dim_x - 1, dim_y - 1),
+				render_passes,
+				errors: &errors,
+				bump,
+				print_errors: false,
+			};
+			minimap::generate(minimap_context, &dm_context.icon_cache)
+				.map_err(|_| eyre!("failed to generate minimap"))
+		};
+		bump.reset();
+		let image = image?; // just ensures the bump allocator is reset even if it errors. kinda stupid but whatever idc
 		minimaps.lock().unwrap().push(GeneratedMinimap {
 			map_dir: map_dir.to_owned(),
 			name: map_name.to_string(),
 			z: z + 1,
 			image,
 		});
-		bump.reset();
 		Ok(())
 	})
 }
