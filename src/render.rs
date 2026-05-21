@@ -188,7 +188,7 @@ fn generate_for_z(
 	map_dir: &Path,
 ) -> Result<()> {
 	let errors = RwLock::default();
-	BUMP.with_borrow(|bump| {
+	BUMP.with_borrow_mut(|bump| {
 		let (dim_x, dim_y, _dim_z) = map.dim_xyz();
 		let minimap_context = minimap::Context {
 			objtree: &dm_context.objtree,
@@ -210,6 +210,7 @@ fn generate_for_z(
 			z: z + 1,
 			image,
 		});
+		bump.reset();
 		Ok(())
 	})
 }
