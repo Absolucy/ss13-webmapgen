@@ -30,7 +30,7 @@ color-eyre = "0.6"
 dmm-tools = { git = "https://github.com/SpaceManiac/SpacemanDMM", features = ["png"] }
 dreammaker = { git = "https://github.com/SpaceManiac/SpacemanDMM" }
 mimalloc = "0.1"
-oxipng = { version = "10", features = ["parallel", "zopfli"], default-features = false }
+oxipng = { version = "10", features = ["parallel"], default-features = false }
 rayon = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
