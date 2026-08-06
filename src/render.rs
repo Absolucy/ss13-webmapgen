@@ -92,26 +92,26 @@ pub fn generate_minimap(
 	let map = dmm::Map::from_file(&map_path).wrap_err_with(|| {
 		format!(
 			"failed to load {} from {}",
-			&map_config.name,
+			map_config.name,
 			map_path.display()
 		)
 	})?;
 	let (dim_x, dim_y, dim_z) = map.dim_xyz();
 	total_bar.println(format!(
 		"{}: dim_x={dim_x}, dim_y={dim_y}, dim_z={dim_z}",
-		&map_config.name
+		map_config.name
 	));
 
 	if flags.render_once {
 		let all_exist = (1..=dim_z).all(|z| {
 			map_dir
-				.join(format!("{}-{z}.png", &map_config.name))
+				.join(format!("{}-{z}.png", map_config.name))
 				.exists()
 		});
 		if all_exist {
 			total_bar.println(format!(
 				"{}: skipping (renderOnce, outputs exist)",
-				&map_config.name
+				map_config.name
 			));
 			return Ok(());
 		}
@@ -144,7 +144,7 @@ pub fn generate_minimap(
 		) {
 			total_bar.println(format!(
 				"failed to generate minimap for {} (z={}): {err}",
-				&map_config.name,
+				map_config.name,
 				z + 1
 			));
 		}
@@ -165,7 +165,7 @@ pub fn generate_minimap(
 			) {
 				total_bar.println(format!(
 					"failed to generate pipes minimap for {} (z={}): {err}",
-					&map_config.name,
+					map_config.name,
 					z + 1
 				));
 			}

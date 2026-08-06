@@ -165,7 +165,7 @@ fn main() -> Result<()> {
 			) {
 				progress.total.println(format!(
 					"failed to generate minimap for {}: {err}",
-					&map_config.name
+					map_config.name
 				));
 			}
 		});
