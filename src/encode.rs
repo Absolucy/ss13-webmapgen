@@ -38,7 +38,7 @@ pub fn generate_minimap_image(
 			image.height,
 			oxipng::ColorType::RGBA,
 			oxipng::BitDepth::Eight,
-			bytemuck::cast_vec(image.data.into_raw_vec()),
+			bytemuck::cast_vec(image.data.into_raw_vec_and_offset().0),
 		)
 		.wrap_err("failed to create raw png image")?;
 		let optimized_png = png
