@@ -9,17 +9,13 @@ pub mod render;
 use crate::{
 	config::{MapCategory, MapConfig, ResolvedFlags, ServerConfig},
 	context::DmContext,
-	encode::generate_minimap_image,
-	render::{
-		GeneratedMinimap, MapOutputSpec, ProgressState, create_render_passes, generate_minimap,
-	},
+	render::{MapOutputSpec, ProgressState, create_render_passes, generate_minimap},
 };
 use color_eyre::eyre::{Context, Result};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::{
 	path::{Path, PathBuf},
-	sync::Mutex,
 	time::{Duration, Instant},
 };
 
@@ -115,7 +111,7 @@ fn main() -> Result<()> {
 		let mp = MultiProgress::new();
 		let total = mp.add(ProgressBar::new(0));
 		total.set_style(total_bar_style());
-		total.set_message("rendering");
+		total.set_message("rendering + encoding");
 		total.enable_steady_tick(Duration::from_millis(100));
 		ProgressState { mp, total }
 	};
@@ -130,10 +126,9 @@ fn main() -> Result<()> {
 		}
 	}
 
-	let minimaps = Mutex::new(Vec::<GeneratedMinimap>::new());
-
 	let mut elapsed_parse = Duration::ZERO;
 	let mut elapsed_render = Duration::ZERO;
+	let optimize_options = config.optimize_options();
 
 	for (game_path, env_file) in &env_keys {
 		let t_parse = Instant::now();
@@ -159,7 +154,8 @@ fn main() -> Result<()> {
 				map_config,
 				&dm_context,
 				&render_passes,
-				&minimaps,
+				&config,
+				&optimize_options,
 				output.clone(),
 				&progress,
 			) {
@@ -172,31 +168,13 @@ fn main() -> Result<()> {
 		elapsed_render += t_render.elapsed();
 	}
 
-	let minimaps = std::mem::take(&mut *minimaps.lock().unwrap());
-
-	progress.total.set_message("encoding");
-	progress.total.inc_length(minimaps.len() as u64);
-	let optimize_options = config.optimize_options();
-	let t_encode = Instant::now();
-	minimaps.into_par_iter().for_each(|minimap| {
-		if let Err(err) =
-			generate_minimap_image(minimap, &config, &optimize_options, &progress.total)
-		{
-			progress
-				.total
-				.println(format!("failed to write minimap: {err}"));
-		}
-	});
-	let elapsed_encode = t_encode.elapsed();
-
 	progress.total.finish_and_clear();
 	progress.mp.clear().ok();
 
 	println!("done :)");
-	println!("  config load:  {:.2?}", elapsed_config);
-	println!("  env parse:    {:.2?}", elapsed_parse);
-	println!("  render:       {:.2?}", elapsed_render);
-	println!("  encode:       {:.2?}", elapsed_encode);
+	println!("  config load:     {:.2?}", elapsed_config);
+	println!("  env parse:       {:.2?}", elapsed_parse);
+	println!("  render + encode: {:.2?}", elapsed_render);
 
 	Ok(())
 }

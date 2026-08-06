@@ -2,6 +2,7 @@
 use crate::{
 	config::{MapConfig, ResolvedFlags, ServerConfig},
 	context::DmContext,
+	encode::generate_minimap_image,
 };
 use bumpalo::Bump;
 use color_eyre::eyre::{Context, Result, eyre};
@@ -15,7 +16,7 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::{
 	cell::RefCell,
 	path::{Path, PathBuf},
-	sync::{Mutex, RwLock},
+	sync::RwLock,
 	time::Duration,
 };
 
@@ -72,7 +73,8 @@ pub fn generate_minimap(
 	map_config: &MapConfig,
 	dm_context: &DmContext,
 	render_passes: &RenderPassHolder,
-	minimaps: &Mutex<Vec<GeneratedMinimap>>,
+	config: &ServerConfig,
+	optimize_options: &oxipng::Options,
 	output: MapOutputSpec,
 	progress: &ProgressState,
 ) -> Result<()> {
@@ -139,8 +141,10 @@ pub fn generate_minimap(
 			map_config,
 			dm_context,
 			&render_passes.main,
-			minimaps,
+			config,
+			optimize_options,
 			&map_dir,
+			total_bar,
 		) {
 			total_bar.println(format!(
 				"failed to generate minimap for {} (z={}): {err}",
@@ -149,7 +153,6 @@ pub fn generate_minimap(
 			));
 		}
 		map_bar.inc(1);
-		total_bar.inc(1);
 	});
 
 	if let Some(ref pipes_dir) = pipes_dir {
@@ -160,8 +163,10 @@ pub fn generate_minimap(
 				map_config,
 				dm_context,
 				&render_passes.pipes,
-				minimaps,
+				config,
+				optimize_options,
 				pipes_dir,
+				total_bar,
 			) {
 				total_bar.println(format!(
 					"failed to generate pipes minimap for {} (z={}): {err}",
@@ -170,7 +175,6 @@ pub fn generate_minimap(
 				));
 			}
 			map_bar.inc(1);
-			total_bar.inc(1);
 		});
 	}
 
@@ -178,19 +182,21 @@ pub fn generate_minimap(
 	Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn generate_for_z(
 	map: &Map,
 	z: usize,
 	map_config: &MapConfig,
 	dm_context: &DmContext,
 	render_passes: &[Box<dyn RenderPass>],
-	minimaps: &Mutex<Vec<GeneratedMinimap>>,
+	config: &ServerConfig,
+	optimize_options: &oxipng::Options,
 	map_dir: &Path,
+	encode_bar: &ProgressBar,
 ) -> Result<()> {
 	let errors = RwLock::default();
 	BUMP.with_borrow_mut(|bump| {
 		let (dim_x, dim_y, _dim_z) = map.dim_xyz();
-		let map_name = &map_config.name;
 		let image = {
 			let minimap_context = minimap::Context {
 				objtree: &dm_context.objtree,
@@ -208,12 +214,16 @@ fn generate_for_z(
 		};
 		bump.reset();
 		let image = image?; // just ensures the bump allocator is reset even if it errors. kinda stupid but whatever idc
-		minimaps.lock().unwrap().push(GeneratedMinimap {
-			map_dir: map_dir.to_owned(),
-			name: map_name.to_string(),
-			z: z + 1,
-			image,
-		});
-		Ok(())
+		generate_minimap_image(
+			crate::render::GeneratedMinimap {
+				map_dir: map_dir.to_owned(),
+				name: map_config.name.clone(),
+				z: z + 1,
+				image,
+			},
+			config,
+			optimize_options,
+			encode_bar,
+		)
 	})
 }
