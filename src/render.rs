@@ -97,10 +97,10 @@ pub fn generate_minimap(
 		)
 	})?;
 	let (dim_x, dim_y, dim_z) = map.dim_xyz();
-	total_bar.println(format!(
+	/* total_bar.println(format!(
 		"{}: dim_x={dim_x}, dim_y={dim_y}, dim_z={dim_z}",
 		map_config.name
-	));
+	)); */
 
 	if flags.render_once {
 		let all_exist = (1..=dim_z).all(|z| {
