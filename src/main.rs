@@ -116,8 +116,8 @@ fn main() -> Result<()> {
 		ProgressState { mp, total }
 	};
 
-	// Collect unique (game_path, env_file) pairs in order to avoid redundant env
-	// parses
+	// Collect unique (game_path, env_file) pairs in order to avoid redundant
+	// env parses
 	let mut env_keys: Vec<(PathBuf, String)> = Vec::new();
 	for cat in &config.categories {
 		let key = (cat.game_path.clone(), cat.env_file.clone());

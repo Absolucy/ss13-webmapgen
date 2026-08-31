@@ -18,7 +18,8 @@ pub fn generate_minimap_image(
 	std::fs::create_dir_all(&map_dir)
 		.wrap_err_with(|| format!("failed to create output directory {}", map_dir.display()))?;
 	if config.generate_webp || config.webp_only {
-		// lossless produces smaller files than lossy even at the same quality setting
+		// lossless produces smaller files than lossy even at the same quality
+		// setting
 		let raw: &[u8] = bytemuck::cast_slice(
 			image
 				.data
