@@ -27,8 +27,7 @@ impl DmContext {
 		context.autodetect_config(&environment);
 		let pp = dm::preprocessor::Preprocessor::new(&*context, environment)
 			.wrap_err("I/O error opening environment")?;
-		let indents = dm::indents::IndentProcessor::new(&*context, pp);
-		let parser = dm::parser::Parser::new(&*context, indents);
+		let parser = dm::Parser::new(&*context, pp);
 		self.objtree = parser.parse_object_tree();
 		Ok(())
 	}
