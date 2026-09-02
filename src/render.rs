@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 use crate::{
+	automapper::{AutomapperConfig, AutomapperTemplate},
 	config::{MapConfig, ResolvedFlags, ServerConfig},
 	context::DmContext,
 	encode::generate_minimap_image,
@@ -8,6 +9,7 @@ use bumpalo::Bump;
 use color_eyre::eyre::{Context, Result, eyre};
 use dm::config::MapRenderer;
 use dmm_tools::{
+	dmi::Rgba8,
 	dmm::{self, Map},
 	minimap,
 	render_passes::RenderPass,
@@ -49,6 +51,7 @@ pub struct MapOutputSpec {
 	pub map_dir: PathBuf,
 	pub pipes_dir: Option<PathBuf>,
 	pub flags: ResolvedFlags,
+	pub automapper: Option<std::sync::Arc<AutomapperConfig>>,
 }
 
 thread_local! {
@@ -87,6 +90,7 @@ pub fn generate_minimap(
 		map_dir,
 		pipes_dir,
 		flags,
+		automapper,
 	} = output;
 	use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
@@ -119,6 +123,23 @@ pub fn generate_minimap(
 		}
 	}
 
+	let map_name = map_path
+		.file_name()
+		.and_then(|name| name.to_str())
+		.ok_or_else(|| eyre!("map path has no valid filename: {}", map_path.display()))?;
+	let templates = automapper
+		.as_ref()
+		.map(|config| config.templates_for(map_name, (dim_x, dim_y, dim_z)))
+		.transpose()?
+		.unwrap_or_default();
+	if !templates.is_empty() {
+		total_bar.println(format!(
+			"{}: applying {} automapper templates",
+			map_config.name,
+			templates.len()
+		));
+	}
+
 	let passes_count = if pipes_dir.is_some() { 2u64 } else { 1u64 };
 	total_bar.inc_length(dim_z as u64 * passes_count);
 
@@ -141,6 +162,7 @@ pub fn generate_minimap(
 			map_config,
 			dm_context,
 			&render_passes.main,
+			&templates,
 			config,
 			optimize_options,
 			&map_dir,
@@ -163,6 +185,7 @@ pub fn generate_minimap(
 				map_config,
 				dm_context,
 				&render_passes.pipes,
+				&templates,
 				config,
 				optimize_options,
 				pipes_dir,
@@ -189,15 +212,16 @@ fn generate_for_z(
 	map_config: &MapConfig,
 	dm_context: &DmContext,
 	render_passes: &[Box<dyn RenderPass>],
+	templates: &[AutomapperTemplate],
 	config: &ServerConfig,
 	optimize_options: &oxipng::Options,
 	map_dir: &Path,
 	encode_bar: &ProgressBar,
 ) -> Result<()> {
-	let errors = RwLock::default();
 	BUMP.with_borrow_mut(|bump| {
-		let (dim_x, dim_y, _dim_z) = map.dim_xyz();
-		let image = {
+		let mut image = {
+			let errors = RwLock::default();
+			let (dim_x, dim_y, _dim_z) = map.dim_xyz();
 			let minimap_context = minimap::Context {
 				objtree: &dm_context.objtree,
 				map,
@@ -210,10 +234,44 @@ fn generate_for_z(
 				print_errors: false,
 			};
 			minimap::generate(minimap_context, &dm_context.icon_cache)
-				.map_err(|_| eyre!("failed to generate minimap"))
+				.map_err(|_| eyre!("failed to generate minimap"))?
 		};
 		bump.reset();
-		let image = image?; // just ensures the bump allocator is reset even if it errors. kinda stupid but whatever idc
+
+		for template in templates {
+			let Some(template_z) = (z + 1).checked_sub(template.z) else {
+				continue;
+			};
+			if template_z >= template.map.dim_z() {
+				continue;
+			}
+			let template_image = {
+				let errors = RwLock::default();
+				let (template_x, template_y, _template_z) = template.map.dim_xyz();
+				let minimap_context = minimap::Context {
+					objtree: &dm_context.objtree,
+					map: &template.map,
+					level: template.map.z_level(template_z),
+					min: (0, 0),
+					max: (template_x - 1, template_y - 1),
+					render_passes,
+					errors: &errors,
+					bump,
+					print_errors: false,
+				};
+				minimap::generate(minimap_context, &dm_context.icon_cache)
+					.map_err(|_| eyre!("failed to generate minimap"))?
+			};
+			bump.reset();
+			composite_template(
+				&mut image,
+				template,
+				template_z,
+				&template_image,
+				map.dim_xyz(),
+			);
+		}
+
 		generate_minimap_image(
 			crate::render::GeneratedMinimap {
 				map_dir: map_dir.to_owned(),
@@ -226,4 +284,47 @@ fn generate_for_z(
 			encode_bar,
 		)
 	})
+}
+
+fn composite_template(
+	base_image: &mut dmm_tools::dmi::Image,
+	template: &AutomapperTemplate,
+	template_z: usize,
+	template_image: &dmm_tools::dmi::Image,
+	base_dimensions: (usize, usize, usize),
+) {
+	const TILE_SIZE: u32 = 32;
+	let (base_x, base_y, _base_z) = base_dimensions;
+	let (_template_x, template_y, _template_z) = template.map.dim_xyz();
+	let dest_x = (template.x as u32 - 1) * TILE_SIZE;
+	let dest_y = (base_y as u32 - (template.y + template_y - 1) as u32) * TILE_SIZE;
+	let image_width = base_image.width as usize;
+	let pixels = base_image
+		.data
+		.as_slice_mut()
+		.expect("image data is not contiguous");
+
+	for (coord, key) in template.map.z_level(template_z).iter_top_down() {
+		let prefabs = &template.map.dictionary[&key];
+		if prefabs
+			.iter()
+			.any(|prefab| prefab.path == "/turf/template_noop")
+		{
+			continue;
+		}
+		let tile_x = dest_x + (coord.x as u32 - 1) * TILE_SIZE;
+		let tile_y = dest_y + (template_y as u32 - coord.y as u32) * TILE_SIZE;
+		for y in tile_y..tile_y + TILE_SIZE {
+			let row_start = y as usize * image_width + tile_x as usize;
+			pixels[row_start..row_start + TILE_SIZE as usize].fill(Rgba8::default());
+		}
+	}
+
+	debug_assert_eq!(base_image.width, base_x as u32 * TILE_SIZE);
+	base_image.composite(
+		template_image,
+		(dest_x, dest_y),
+		(0, 0, template_image.width, template_image.height),
+		[u8::MAX; 4],
+	);
 }

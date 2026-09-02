@@ -17,6 +17,7 @@
 			"name": "Stations",
 			"gamePath": "/path/to/SS13/MyStation",
 			"mapFilesPath": "_maps/map_files",
+			"automapperConfigPath": "_maps/nova/automapper/automapper_config.toml",
 			"maps": [
 				{
 					"name": "SerenityStation",

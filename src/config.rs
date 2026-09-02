@@ -91,6 +91,7 @@ pub struct MapCategory {
 	pub logo: Option<String>,
 	pub game_path: PathBuf,
 	pub map_files_path: PathBuf,
+	pub automapper_config_path: Option<PathBuf>,
 	#[serde(default = "default_dme_name")]
 	pub env_file: String,
 	#[serde(default)]

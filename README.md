@@ -17,3 +17,8 @@ done :)
   encode:       38.17s
 ```
 note: encode time is almost **entirely** spent on png optimization - disabling pngs entirely and only using webps can result in much faster generation times
+
+Nova/Oculis modular maps can opt into template automapping with `automapperConfigPath` on a
+category. The path is relative to `gamePath`, for example
+`_maps/nova/automapper/automapper_config.toml`. Matching templates are applied in TOML order;
+when an entry lists multiple files, webmapgen uses the first one.

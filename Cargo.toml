@@ -26,13 +26,14 @@ bumpalo = "3"
 indicatif = "0.18"
 bytemuck = { version = "1", features = ["extern_crate_alloc"] }
 color-eyre = "0.6"
-dmm-tools = { git = "https://github.com/SpaceManiac/SpacemanDMM", features = ["png"] }
-dreammaker = { git = "https://github.com/SpaceManiac/SpacemanDMM" }
+dmm-tools = { git = "https://github.com/SpaceManiac/SpacemanDMM", features = ["png"], rev = "01ac9e45beaac4fdecb2dfdb91f5dda91d324338" }
+dreammaker = { git = "https://github.com/SpaceManiac/SpacemanDMM", rev = "01ac9e45beaac4fdecb2dfdb91f5dda91d324338" }
 mimalloc = "0.1"
 oxipng = { version = "10", features = ["parallel"], default-features = false }
 rayon = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+toml = { version = "1", features = ["preserve_order"] }
 webp = { version = "0.3", default-features = false }
 
 [profile.release]

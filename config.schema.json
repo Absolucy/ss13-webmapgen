@@ -80,6 +80,10 @@
 					"description": "Path to map files relative to gamePath",
 					"type": "string"
 				},
+				"automapperConfigPath": {
+					"description": "Optional Nova/Oculis automapper TOML path relative to gamePath",
+					"type": "string"
+				},
 				"envFile": {
 					"description": "DME environment filename relative to gamePath (default: tgstation.dme)",
 					"type": "string"

@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: MPL-2.0
 extern crate dreammaker as dm;
 
+pub mod automapper;
 pub mod config;
 pub mod context;
 pub mod encode;
 pub mod render;
 
 use crate::{
+	automapper::AutomapperConfig,
 	config::{MapCategory, MapConfig, ResolvedFlags, ServerConfig},
 	context::DmContext,
 	render::{MapOutputSpec, ProgressState, create_render_passes, generate_minimap},
@@ -16,6 +18,7 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::{
 	path::{Path, PathBuf},
+	sync::Arc,
 	time::{Duration, Instant},
 };
 
@@ -34,6 +37,7 @@ fn total_bar_style() -> ProgressStyle {
 fn collect_category_maps<'a>(
 	cat: &'a MapCategory,
 	out_path: &Path,
+	automapper: Option<Arc<AutomapperConfig>>,
 ) -> impl Iterator<Item = (&'a MapConfig, MapOutputSpec)> {
 	let base_map_path = cat.base_map_path();
 	let cat_name = cat.name.clone();
@@ -42,6 +46,7 @@ fn collect_category_maps<'a>(
 		let base_map_path = base_map_path.clone();
 		let cat_name = cat_name.clone();
 		let out_path = out_path.clone();
+		let automapper = automapper.clone();
 		move |m| {
 			let flags = ResolvedFlags::resolve(m, None, cat);
 			let map_dir = out_path.join(&cat_name).join(&m.name);
@@ -53,6 +58,7 @@ fn collect_category_maps<'a>(
 				map_dir,
 				pipes_dir,
 				flags,
+				automapper: automapper.clone(),
 			})
 		}
 	});
@@ -60,10 +66,12 @@ fn collect_category_maps<'a>(
 		let base_map_path = base_map_path.clone();
 		let cat_name = cat_name.clone();
 		let out_path = out_path.clone();
+		let automapper = automapper.clone();
 		move |sub| {
 			let base_map_path = base_map_path.clone();
 			let cat_name = cat_name.clone();
 			let out_path = out_path.clone();
+			let automapper = automapper.clone();
 			let sub_name = sub.name.clone();
 			sub.maps.iter().map(move |m| {
 				let flags = ResolvedFlags::resolve(m, Some(sub), cat);
@@ -80,6 +88,7 @@ fn collect_category_maps<'a>(
 					map_dir,
 					pipes_dir,
 					flags,
+					automapper: automapper.clone(),
 				})
 			})
 		}
@@ -141,12 +150,23 @@ fn main() -> Result<()> {
 
 		let render_passes = create_render_passes(&config, &dm_ctx.config().map_renderer);
 
-		let group_maps: Vec<_> = config
+		let mut group_maps = Vec::new();
+		for cat in config
 			.categories
 			.iter()
 			.filter(|cat| &cat.game_path == game_path && &cat.env_file == env_file)
-			.flat_map(|cat| collect_category_maps(cat, &config.out_path))
-			.collect();
+		{
+			let automapper = cat
+				.automapper_config_path
+				.as_ref()
+				.map(|path| AutomapperConfig::from_file(&cat.game_path.join(path), &cat.game_path))
+				.transpose()
+				.wrap_err_with(|| {
+					format!("failed to load automapper config for category {}", cat.name)
+				})?
+				.map(Arc::new);
+			group_maps.extend(collect_category_maps(cat, &config.out_path, automapper));
+		}
 
 		let t_render = Instant::now();
 		group_maps.par_iter().for_each(|(map_config, output)| {
